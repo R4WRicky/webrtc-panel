@@ -1,53 +1,90 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Panel WebRTC Público</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel WebRTC Público</title>
+  <style>
+    body {
+      background-color: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+
+    textarea {
+      width: 90%;
+      height: 120px;
+      margin: 10px auto;
+      display: block;
+      font-family: monospace;
+      resize: vertical;
+    }
+
+    video {
+      margin-top: 20px;
+      width: 600px;
+      max-width: 90%;
+      border: 2px solid white;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 10px;
+      cursor: pointer;
+    }
+  </style>
 </head>
-<body style="background-color: #121212; color: white; font-family: sans-serif; text-align: center; padding: 30px;">
-    <h1>Panel WebRTC Público</h1>
-    <textarea id="sdpOfferInput" placeholder="Oferta SDP Base64" style="width: 90%; height: 120px;"></textarea>
-    <br><br>
-    <button onclick="responderSDP()" style="padding: 10px 20px;">Generar Respuesta</button>
-    <br><br>
-    <textarea id="sdpAnswerOutput" placeholder="Respuesta SDP del servidor..." style="width: 90%; height: 150px;"></textarea>
+<body>
+  <h1>Panel WebRTC Público</h1>
 
-    <script>
-        async function responderSDP() {
-            const offerBase64 = document.getElementById("sdpOfferInput").value.trim();
-            if (!offerBase64) {
-                alert("Pega la oferta del bot primero.");
-                return;
-            }
+  <textarea id="sdp-offer" placeholder="Pega aquí la oferta SDP en base64"></textarea>
+  <button onclick="generateAnswer()">Generar Respuesta</button>
 
-            try {
-                const offerSDP = atob(offerBase64); // decodificar base64
-                const pc = new RTCPeerConnection();
+  <textarea id="sdp-answer" placeholder="Aquí se generará la respuesta SDP..." readonly></textarea>
 
-                pc.ontrack = (event) => {
-                    const stream = event.streams[0];
-                    const video = document.createElement("video");
-                    video.srcObject = stream;
-                    video.autoplay = true;
-                    video.controls = true;
-                    video.style.maxWidth = "80%";
-                    document.body.appendChild(video);
-                };
+  <video id="remoteVideo" autoplay playsinline></video>
 
-                await pc.setRemoteDescription(new RTCSessionDescription({
-                    type: "offer",
-                    sdp: offerSDP
-                }));
+  <script type="module">
+    import { RTCPeerConnection } from "https://cdn.jsdelivr.net/npm/wrtc-adapter/browser.js";
 
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
+    async function generateAnswer() {
+      const base64SDP = document.getElementById("sdp-offer").value.trim();
+      if (!base64SDP) {
+        alert("Pega una oferta SDP primero.");
+        return;
+      }
 
-                const answerBase64 = btoa(pc.localDescription.sdp);
-                document.getElementById("sdpAnswerOutput").value = answerBase64;
-            } catch (err) {
-                alert("Error al generar la respuesta: " + err.message);
-            }
-        }
-    </script>
+      try {
+        const decodedSDP = atob(base64SDP);
+        const remoteDesc = new RTCSessionDescription({
+          type: "offer",
+          sdp: decodedSDP,
+        });
+
+        const pc = new RTCPeerConnection();
+        const remoteStream = new MediaStream();
+        const videoElement = document.getElementById("remoteVideo");
+        videoElement.srcObject = remoteStream;
+
+        pc.ontrack = (event) => {
+          remoteStream.addTrack(event.track);
+        };
+
+        await pc.setRemoteDescription(remoteDesc);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        const encodedAnswer = btoa(pc.localDescription.sdp);
+        document.getElementById("sdp-answer").value = encodedAnswer;
+
+      } catch (e) {
+        console.error("Error procesando la oferta:", e);
+        alert("Ocurrió un error generando la respuesta. Revisa la consola.");
+      }
+    }
+  </script>
 </body>
 </html>
