@@ -2,91 +2,107 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebRTC Panel Público</title>
   <style>
     body {
-      background-color: black;
-      color: white;
+      background: #111;
+      color: #0f0;
       font-family: monospace;
       text-align: center;
+      padding: 20px;
     }
     textarea {
-      width: 95%;
+      width: 90%;
       height: 150px;
-      background-color: black;
+      background: black;
       color: lime;
-      font-family: monospace;
-      margin: 10px auto;
-      display: block;
+      border: 1px solid #0f0;
+      margin: 10px 0;
+    }
+    video {
+      width: 50%;
+      margin-top: 20px;
+      border: 1px solid #0ff;
     }
     #status {
+      margin: 1rem;
       color: cyan;
-      margin: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+      font-weight: bold;
+      background: #333;
+      color: #0f0;
+      border: 1px solid #0f0;
     }
   </style>
 </head>
 <body>
-  <h1>WebRTC Panel Público</h1>
-  <p>1. Pega la oferta base64 del bot:</p>
-  <textarea id="offer"></textarea>
-  <button onclick="generateAnswer()">Generar Respuesta</button>
 
-  <p>2. Copia y envía esta respuesta al bot:</p>
-  <textarea id="answer"></textarea>
+<h1>WebRTC Panel Público</h1>
 
-  <p id="status">Esperando conexión...</p>
-  <video id="video" autoplay muted playsinline style="width: 480px; height: auto; background-color: #222;"></video>
+<p>1. Pega la oferta base64 del bot:</p>
+<textarea id="sdp-offer"></textarea>
+<br>
+<button onclick="responderSDP()">Generar Respuesta</button>
 
-  <script>
-    const offerText = document.getElementById("offer");
-    const answerText = document.getElementById("answer");
-    const status = document.getElementById("status");
-    const video = document.getElementById("video");
+<p>2. Copia y envía esta respuesta al bot:</p>
+<textarea id="sdp-answer" readonly></textarea>
 
-    let pc;
+<div id="status">Esperando conexión...</div>
+<video id="video" autoplay playsinline muted></video>
 
-    async function generateAnswer() {
-      status.textContent = "Procesando...";
-      try {
-        const offer = atob(offerText.value.trim());
-        pc = new RTCPeerConnection();
+<script>
+  const video = document.getElementById("video");
+  const status = document.getElementById("status");
 
-        pc.ontrack = (event) => {
-          status.textContent = "Conexión establecida y video recibiéndose.";
+  async function responderSDP() {
+    try {
+      const offerBase64 = document.getElementById("sdp-offer").value.trim();
+      const offerSDP = atob(offerBase64);
+      const offerDesc = {
+        type: "offer",
+        sdp: offerSDP
+      };
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      pc.ontrack = (event) => {
+        if (event.track.kind === "video") {
           video.srcObject = event.streams[0];
-        };
+          status.textContent = "✅ Video recibido correctamente.";
+        }
+      };
 
-        pc.oniceconnectionstatechange = () => {
-          console.log("Estado ICE:", pc.iceConnectionState);
-          if (pc.iceConnectionState === "connected") {
-            status.textContent = "Conectado con el bot.";
-          }
-        };
+      pc.oniceconnectionstatechange = () => {
+        console.log("ICE state:", pc.iceConnectionState);
+        if (pc.iceConnectionState === "disconnected") {
+          status.textContent = "❌ Conexión perdida.";
+        }
+      };
 
-        await pc.setRemoteDescription({ type: "offer", sdp: offer });
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
+      await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-        await new Promise(resolve => {
-          if (pc.iceGatheringState === "complete") return resolve();
-          const checkState = () => {
-            if (pc.iceGatheringState === "complete") {
-              pc.removeEventListener("icegatheringstatechange", checkState);
-              resolve();
-            }
-          };
-          pc.addEventListener("icegatheringstatechange", checkState);
-        });
+      // Esperar a que se completen todos los candidatos
+      pc.onicegatheringstatechange = async () => {
+        if (pc.iceGatheringState === "complete") {
+          const answerBase64 = btoa(pc.localDescription.sdp);
+          document.getElementById("sdp-answer").value = answerBase64;
+        }
+      };
 
-        const answerBase64 = btoa(pc.localDescription.sdp);
-        answerText.value = answerBase64;
-        status.textContent = "Respuesta generada correctamente.";
-      } catch (err) {
-        console.error(err);
-        status.textContent = "Error generando la respuesta. Verifica el texto de la oferta.";
-      }
+      status.textContent = "⚙️ Generando respuesta SDP...";
+    } catch (err) {
+      console.error(err);
+      status.textContent = "❌ Error al generar respuesta SDP.";
     }
-  </script>
+  }
+</script>
+
 </body>
 </html>
