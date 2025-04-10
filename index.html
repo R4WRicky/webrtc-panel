@@ -2,107 +2,89 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Panel WebRTC Público</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Panel Público</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #eee;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2em;
+      background-color: black;
+      color: white;
+      font-family: monospace;
+      text-align: center;
     }
     textarea {
-      width: 90%;
-      height: 180px;
-      margin: 0.5em 0;
-      background: #222;
-      color: #0f0;
-      border: 1px solid #444;
-      resize: none;
-    }
-    button {
-      margin: 0.5em;
-      padding: 0.5em 1em;
-      background: #444;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #666;
+      width: 95%;
+      height: 150px;
+      background-color: black;
+      color: lime;
+      font-family: monospace;
+      margin: 10px auto;
+      display: block;
     }
     #status {
-      margin-top: 1em;
-      color: #0af;
+      color: cyan;
+      margin: 10px;
     }
   </style>
 </head>
 <body>
   <h1>WebRTC Panel Público</h1>
   <p>1. Pega la oferta base64 del bot:</p>
-  <textarea id="offer" placeholder="Oferta SDP en base64..."></textarea>
-  <button onclick="generarRespuesta()">Generar Respuesta</button>
+  <textarea id="offer"></textarea>
+  <button onclick="generateAnswer()">Generar Respuesta</button>
+
   <p>2. Copia y envía esta respuesta al bot:</p>
-  <textarea id="answer" readonly></textarea>
-  <div id="status">Esperando oferta...</div>
+  <textarea id="answer"></textarea>
+
+  <p id="status">Esperando conexión...</p>
+  <video id="video" autoplay muted playsinline style="width: 480px; height: auto; background-color: #222;"></video>
 
   <script>
-    async function generarRespuesta() {
-      const offerBase64 = document.getElementById("offer").value.trim();
-      if (!offerBase64) {
-        alert("Por favor, pega la oferta en base64.");
-        return;
-      }
+    const offerText = document.getElementById("offer");
+    const answerText = document.getElementById("answer");
+    const status = document.getElementById("status");
+    const video = document.getElementById("video");
 
+    let pc;
+
+    async function generateAnswer() {
+      status.textContent = "Procesando...";
       try {
-        const sdp = atob(offerBase64);
-        const offer = {
-          type: "offer",
-          sdp: sdp
-        };
-
-        const pc = new RTCPeerConnection({
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" }
-          ]
-        });
+        const offer = atob(offerText.value.trim());
+        pc = new RTCPeerConnection();
 
         pc.ontrack = (event) => {
-          const stream = event.streams[0];
-          const video = document.createElement("video");
-          video.srcObject = stream;
-          video.autoplay = true;
-          video.controls = true;
-          video.style.marginTop = "1em";
-          document.body.appendChild(video);
+          status.textContent = "Conexión establecida y video recibiéndose.";
+          video.srcObject = event.streams[0];
         };
 
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        pc.oniceconnectionstatechange = () => {
+          console.log("Estado ICE:", pc.iceConnectionState);
+          if (pc.iceConnectionState === "connected") {
+            status.textContent = "Conectado con el bot.";
+          }
+        };
+
+        await pc.setRemoteDescription({ type: "offer", sdp: offer });
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         await new Promise(resolve => {
-          if (pc.iceGatheringState === "complete") {
-            resolve();
-          } else {
-            const checkState = () => {
-              if (pc.iceGatheringState === "complete") {
-                pc.removeEventListener("icegatheringstatechange", checkState);
-                resolve();
-              }
-            };
-            pc.addEventListener("icegatheringstatechange", checkState);
-          }
+          if (pc.iceGatheringState === "complete") return resolve();
+          const checkState = () => {
+            if (pc.iceGatheringState === "complete") {
+              pc.removeEventListener("icegatheringstatechange", checkState);
+              resolve();
+            }
+          };
+          pc.addEventListener("icegatheringstatechange", checkState);
         });
 
         const answerBase64 = btoa(pc.localDescription.sdp);
-        document.getElementById("answer").value = answerBase64;
-        document.getElementById("status").textContent = "Respuesta generada correctamente.";
-      } catch (error) {
-        document.getElementById("status").textContent = "Error generando la respuesta.";
-        console.error(error);
+        answerText.value = answerBase64;
+        status.textContent = "Respuesta generada correctamente.";
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error generando la respuesta. Verifica el texto de la oferta.";
       }
     }
   </script>
