@@ -1,88 +1,83 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Panel WebRTC Público</title>
   <style>
     body {
       background-color: #111;
       color: white;
-      font-family: Arial, sans-serif;
+      font-family: sans-serif;
       text-align: center;
-      padding: 20px;
     }
-
     textarea {
       width: 90%;
       height: 120px;
-      margin: 10px auto;
-      display: block;
+      margin: 10px 0;
       font-family: monospace;
-      resize: vertical;
     }
-
-    video {
-      margin-top: 20px;
-      width: 600px;
-      max-width: 90%;
-      border: 2px solid white;
-    }
-
     button {
       padding: 10px 20px;
       font-size: 16px;
-      margin: 10px;
+      background-color: #5c6bc0;
+      color: white;
+      border: none;
       cursor: pointer;
+    }
+    video {
+      width: 320px;
+      height: 240px;
+      background-color: black;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
   <h1>Panel WebRTC Público</h1>
 
-  <textarea id="sdp-offer" placeholder="Pega aquí la oferta SDP en base64"></textarea>
+  <textarea id="sdp-offer" placeholder="Pega aquí la oferta SDP codificada en Base64..."></textarea>
+  <br>
   <button onclick="generateAnswer()">Generar Respuesta</button>
+  <br>
+  <textarea id="sdp-answer" placeholder="Respuesta SDP del servidor..." readonly></textarea>
 
-  <textarea id="sdp-answer" placeholder="Aquí se generará la respuesta SDP..." readonly></textarea>
+  <video id="remoteVideo" autoplay playsinline controls muted></video>
 
-  <video id="remoteVideo" autoplay playsinline></video>
-
-  <script type="module">
-    import { RTCPeerConnection } from "https://cdn.jsdelivr.net/npm/wrtc-adapter/browser.js";
+  <script>
+    let pc = null;
 
     async function generateAnswer() {
-      const base64SDP = document.getElementById("sdp-offer").value.trim();
-      if (!base64SDP) {
-        alert("Pega una oferta SDP primero.");
+      const offerBase64 = document.getElementById("sdp-offer").value.trim();
+
+      if (!offerBase64) {
+        alert("Pega una oferta SDP válida.");
         return;
       }
 
       try {
-        const decodedSDP = atob(base64SDP);
-        const remoteDesc = new RTCSessionDescription({
+        const sdp = atob(offerBase64);
+        const offer = {
           type: "offer",
-          sdp: decodedSDP,
-        });
-
-        const pc = new RTCPeerConnection();
-        const remoteStream = new MediaStream();
-        const videoElement = document.getElementById("remoteVideo");
-        videoElement.srcObject = remoteStream;
-
-        pc.ontrack = (event) => {
-          remoteStream.addTrack(event.track);
+          sdp: sdp
         };
 
-        await pc.setRemoteDescription(remoteDesc);
+        pc = new RTCPeerConnection();
+        const remoteVideo = document.getElementById("remoteVideo");
+
+        pc.ontrack = function (event) {
+          remoteVideo.srcObject = event.streams[0];
+        };
+
+        await pc.setRemoteDescription(offer);
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        const encodedAnswer = btoa(pc.localDescription.sdp);
-        document.getElementById("sdp-answer").value = encodedAnswer;
-
+        const sdpAnswerBase64 = btoa(pc.localDescription.sdp);
+        document.getElementById("sdp-answer").value = sdpAnswerBase64;
       } catch (e) {
-        console.error("Error procesando la oferta:", e);
-        alert("Ocurrió un error generando la respuesta. Revisa la consola.");
+        console.error("Error al procesar la oferta:", e);
+        alert("Error al generar respuesta: " + e.message);
       }
     }
   </script>
