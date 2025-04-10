@@ -1,108 +1,77 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>WebRTC Panel Público</title>
   <style>
     body {
-      background: #111;
-      color: #0f0;
-      font-family: monospace;
+      background-color: black;
+      color: white;
       text-align: center;
-      padding: 20px;
+      font-family: monospace;
     }
     textarea {
       width: 90%;
-      height: 150px;
-      background: black;
-      color: lime;
-      border: 1px solid #0f0;
+      height: 180px;
+      background-color: black;
+      color: #00ff00;
       margin: 10px 0;
     }
     video {
-      width: 50%;
-      margin-top: 20px;
-      border: 1px solid #0ff;
+      width: 640px;
+      height: 360px;
+      background: #111;
+      margin-top: 15px;
     }
-    #status {
-      margin: 1rem;
-      color: cyan;
-    }
-    button {
-      padding: 10px 20px;
+    .status {
       margin-top: 10px;
-      font-weight: bold;
-      background: #333;
-      color: #0f0;
-      border: 1px solid #0f0;
+      color: cyan;
     }
   </style>
 </head>
 <body>
+  <h1>WebRTC Panel Público</h1>
+  <p>1. Pega la oferta base64 del bot:</p>
+  <textarea id="offer"></textarea><br>
+  <button id="connect">Generar Respuesta</button>
+  <p>2. Copia y envía esta respuesta al bot:</p>
+  <textarea id="answer" readonly></textarea>
+  <div class="status" id="status"></div>
+  <video id="remoteVideo" autoplay playsinline></video>
 
-<h1>WebRTC Panel Público</h1>
+  <script>
+    const offerText = document.getElementById("offer");
+    const answerText = document.getElementById("answer");
+    const video = document.getElementById("remoteVideo");
+    const status = document.getElementById("status");
 
-<p>1. Pega la oferta base64 del bot:</p>
-<textarea id="sdp-offer"></textarea>
-<br>
-<button onclick="responderSDP()">Generar Respuesta</button>
+    let pc = null;
 
-<p>2. Copia y envía esta respuesta al bot:</p>
-<textarea id="sdp-answer" readonly></textarea>
+    document.getElementById("connect").onclick = async () => {
+      try {
+        const offerSDP = atob(offerText.value.trim());
+        pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
 
-<div id="status">Esperando conexión...</div>
-<video id="video" autoplay playsinline muted></video>
-
-<script>
-  const video = document.getElementById("video");
-  const status = document.getElementById("status");
-
-  async function responderSDP() {
-    try {
-      const offerBase64 = document.getElementById("sdp-offer").value.trim();
-      const offerSDP = atob(offerBase64);
-      const offerDesc = {
-        type: "offer",
-        sdp: offerSDP
-      };
-
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-      });
-
-      pc.ontrack = (event) => {
-        if (event.track.kind === "video") {
+        pc.ontrack = (event) => {
           video.srcObject = event.streams[0];
-          status.textContent = "✅ Video recibido correctamente.";
-        }
-      };
+          status.textContent = "✅ Conexión establecida.";
+        };
 
-      pc.oniceconnectionstatechange = () => {
-        console.log("ICE state:", pc.iceConnectionState);
-        if (pc.iceConnectionState === "disconnected") {
-          status.textContent = "❌ Conexión perdida.";
-        }
-      };
+        pc.onicecandidate = (event) => {
+          if (!event.candidate) {
+            const answer = pc.localDescription.sdp;
+            answerText.value = btoa(answer);
+          }
+        };
 
-      await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      // Esperar a que se completen todos los candidatos
-      pc.onicegatheringstatechange = async () => {
-        if (pc.iceGatheringState === "complete") {
-          const answerBase64 = btoa(pc.localDescription.sdp);
-          document.getElementById("sdp-answer").value = answerBase64;
-        }
-      };
-
-      status.textContent = "⚙️ Generando respuesta SDP...";
-    } catch (err) {
-      console.error(err);
-      status.textContent = "❌ Error al generar respuesta SDP.";
-    }
-  }
-</script>
-
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offerSDP }));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+      } catch (err) {
+        console.error("Error al conectar:", err);
+        status.textContent = "❌ Error: " + err.message;
+      }
+    };
+  </script>
 </body>
 </html>
