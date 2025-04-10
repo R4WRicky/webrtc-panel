@@ -5,52 +5,54 @@
   <title>Panel WebRTC Público</title>
   <style>
     body {
-      background-color: #111;
-      color: white;
-      font-family: sans-serif;
-      text-align: center;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2em;
     }
     textarea {
       width: 90%;
-      height: 120px;
-      margin: 10px 0;
-      font-family: monospace;
+      height: 180px;
+      margin: 0.5em 0;
+      background: #222;
+      color: #0f0;
+      border: 1px solid #444;
+      resize: none;
     }
     button {
-      padding: 10px 20px;
-      font-size: 16px;
-      background-color: #5c6bc0;
+      margin: 0.5em;
+      padding: 0.5em 1em;
+      background: #444;
       color: white;
       border: none;
       cursor: pointer;
     }
-    video {
-      width: 320px;
-      height: 240px;
-      background-color: black;
-      margin-top: 20px;
+    button:hover {
+      background: #666;
+    }
+    #status {
+      margin-top: 1em;
+      color: #0af;
     }
   </style>
 </head>
 <body>
-  <h1>Panel WebRTC Público</h1>
-
-  <textarea id="sdp-offer" placeholder="Pega aquí la oferta SDP codificada en Base64..."></textarea>
-  <br>
-  <button onclick="generateAnswer()">Generar Respuesta</button>
-  <br>
-  <textarea id="sdp-answer" placeholder="Respuesta SDP del servidor..." readonly></textarea>
-
-  <video id="remoteVideo" autoplay playsinline controls muted></video>
+  <h1>WebRTC Panel Público</h1>
+  <p>1. Pega la oferta base64 del bot:</p>
+  <textarea id="offer" placeholder="Oferta SDP en base64..."></textarea>
+  <button onclick="generarRespuesta()">Generar Respuesta</button>
+  <p>2. Copia y envía esta respuesta al bot:</p>
+  <textarea id="answer" readonly></textarea>
+  <div id="status">Esperando oferta...</div>
 
   <script>
-    let pc = null;
-
-    async function generateAnswer() {
-      const offerBase64 = document.getElementById("sdp-offer").value.trim();
-
+    async function generarRespuesta() {
+      const offerBase64 = document.getElementById("offer").value.trim();
       if (!offerBase64) {
-        alert("Pega una oferta SDP válida.");
+        alert("Por favor, pega la oferta en base64.");
         return;
       }
 
@@ -61,23 +63,46 @@
           sdp: sdp
         };
 
-        pc = new RTCPeerConnection();
-        const remoteVideo = document.getElementById("remoteVideo");
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" }
+          ]
+        });
 
-        pc.ontrack = function (event) {
-          remoteVideo.srcObject = event.streams[0];
+        pc.ontrack = (event) => {
+          const stream = event.streams[0];
+          const video = document.createElement("video");
+          video.srcObject = stream;
+          video.autoplay = true;
+          video.controls = true;
+          video.style.marginTop = "1em";
+          document.body.appendChild(video);
         };
 
-        await pc.setRemoteDescription(offer);
-
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        const sdpAnswerBase64 = btoa(pc.localDescription.sdp);
-        document.getElementById("sdp-answer").value = sdpAnswerBase64;
-      } catch (e) {
-        console.error("Error al procesar la oferta:", e);
-        alert("Error al generar respuesta: " + e.message);
+        await new Promise(resolve => {
+          if (pc.iceGatheringState === "complete") {
+            resolve();
+          } else {
+            const checkState = () => {
+              if (pc.iceGatheringState === "complete") {
+                pc.removeEventListener("icegatheringstatechange", checkState);
+                resolve();
+              }
+            };
+            pc.addEventListener("icegatheringstatechange", checkState);
+          }
+        });
+
+        const answerBase64 = btoa(pc.localDescription.sdp);
+        document.getElementById("answer").value = answerBase64;
+        document.getElementById("status").textContent = "Respuesta generada correctamente.";
+      } catch (error) {
+        document.getElementById("status").textContent = "Error generando la respuesta.";
+        console.error(error);
       }
     }
   </script>
